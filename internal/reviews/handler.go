@@ -159,6 +159,10 @@ func (handler *Handler) Delete(responseWriter http.ResponseWriter, request *http
 }
 
 func (handler *Handler) requireReview(responseWriter http.ResponseWriter, request *http.Request) (Review, bool) {
+	current, ok := handler.requireAuth(responseWriter, request)
+	if !ok || !handler.verifyCSRF(responseWriter, request, current.Session.CSRFToken) {
+		return Review{}, false
+	}
 	reviewID, valid := httpx.ParseSafeInteger(request.PathValue("id"))
 	if !valid {
 		handler.reviewNotFound(responseWriter)
@@ -169,7 +173,7 @@ func (handler *Handler) requireReview(responseWriter http.ResponseWriter, reques
 		handler.internalError(responseWriter, request, err)
 		return Review{}, false
 	}
-	if !found {
+	if !found || review.UserID != current.User.ID {
 		handler.reviewNotFound(responseWriter)
 		return Review{}, false
 	}

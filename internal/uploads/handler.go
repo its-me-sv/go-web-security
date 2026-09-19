@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
@@ -87,7 +88,7 @@ func (handler *Handler) Upload(responseWriter http.ResponseWriter, request *http
 }
 
 func (handler *Handler) Download(responseWriter http.ResponseWriter, request *http.Request) {
-	_, ok := handler.requireAuth(responseWriter, request)
+	current, ok := handler.requireAuth(responseWriter, request)
 	if !ok {
 		return
 	}
@@ -101,7 +102,9 @@ func (handler *Handler) Download(responseWriter http.ResponseWriter, request *ht
 		handler.internalError(responseWriter, request, err)
 		return
 	}
-	if !found {
+	if !found ||
+		(file.UserID != current.User.ID &&
+			!slices.Contains([]string{"support", "admin"}, current.User.Role)) {
 		handler.fileNotFound(responseWriter)
 		return
 	}

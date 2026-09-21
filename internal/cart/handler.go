@@ -191,10 +191,7 @@ func parseQuantity(value string, minimum int64) (int64, bool) {
 		return 0, false
 	}
 	quantity, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return 0, false
-	}
-	return quantity, quantity >= minimum && quantity <= MaximumQuantity
+	return quantity, err == nil && quantity >= minimum && quantity <= MaximumQuantity
 }
 
 var quantityPattern = regexp.MustCompile(`^(0|[1-9][0-9]?)$`)

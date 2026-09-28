@@ -87,6 +87,7 @@ func (handler *Handler) Order(responseWriter http.ResponseWriter, request *http.
 }
 
 func (handler *Handler) Products(responseWriter http.ResponseWriter, request *http.Request) {
+	responseWriter.Header().Set("Access-Control-Allow-Origin", "*")
 	products, err := handler.productStore.ListAllProducts(request.Context())
 	if err != nil {
 		handler.internalError(responseWriter, request, err)

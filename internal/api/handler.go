@@ -96,6 +96,12 @@ func (handler *Handler) Products(responseWriter http.ResponseWriter, request *ht
 	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"products": products})
 }
 
+func (handler *Handler) ProductPreflight(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (handler *Handler) WarehouseOrders(responseWriter http.ResponseWriter, request *http.Request) {
 	apiKey := request.Header.Get("X-API-Key")
 	if apiKey == "" {

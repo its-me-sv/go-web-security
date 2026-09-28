@@ -216,7 +216,7 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		}
 	})
 
-	dynamicHandler := csrfProtection(options.AppOrigin, renderer)(dynamicMux)
+	dynamicHandler := securityHeaders(options.AppOrigin, renderer)(dynamicMux)
 
 	mainMux := http.NewServeMux()
 	mainMux.HandleFunc("GET /health", func(responseWriter http.ResponseWriter, _ *http.Request) {
@@ -236,10 +236,7 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 
 	handler := applyMiddleware(
 		mainMux,
-		cspNonce,
-		cspRule,
 		recoverPanics(logger, renderer),
-		noSniff,
 	)
 	return &Application{Handler: handler, publicRoot: publicRoot}, nil
 }
@@ -256,6 +253,9 @@ func newStaticHandler(publicRoot *os.Root) http.Handler {
 		if err != nil || fileInfo.IsDir() {
 			http.NotFound(responseWriter, request)
 			return
+		}
+		if fileInfo.Name() == "shipping-widget.css" || fileInfo.Name() == "shipping-widget.js" {
+			responseWriter.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 		}
 		fileServer.ServeHTTP(responseWriter, request)
 	})

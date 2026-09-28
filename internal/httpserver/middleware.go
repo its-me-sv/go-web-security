@@ -30,24 +30,7 @@ func applyMiddleware(handler http.Handler, middlewareChain ...middleware) http.H
 	return handler
 }
 
-func noSniff(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		responseWriter.Header().Set("X-Content-Type-Options", "nosniff")
-		next.ServeHTTP(responseWriter, request)
-	})
-}
-
-func cspRule(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		nonce := httpx.CSPNonce(request.Context())
-		responseWriter.Header().Set("Content-Security-Policy", fmt.Sprintf("default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'", nonce))
-		responseWriter.Header().Set("X-Frame-Options", "SAMEORIGIN")
-		responseWriter.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		next.ServeHTTP(responseWriter, request)
-	})
-}
-
-func csrfProtection(appOrigin string, renderer *templates.Renderer) middleware {
+func securityHeaders(appOrigin string, renderer *templates.Renderer) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
 			if request.Method == http.MethodPost {
@@ -72,22 +55,31 @@ func csrfProtection(appOrigin string, renderer *templates.Renderer) middleware {
 				}
 			}
 
+			nonceBytes := make([]byte, 16)
+			if _, err := rand.Read(nonceBytes); err != nil {
+				http.Error(responseWriter, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+			nonce := base64.StdEncoding.EncodeToString(nonceBytes)
+			request = request.WithContext(httpx.WithCSPNonce(request.Context(), nonce))
+
+			responseWriter.Header().Set("Content-Security-Policy", fmt.Sprintf("default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'", nonce))
+			responseWriter.Header().Set("X-Frame-Options", "SAMEORIGIN")
+			responseWriter.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+
+			responseWriter.Header().Set("X-Content-Type-Options", "nosniff")
+
+			responseWriter.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+			responseWriter.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+			responseWriter.Header().Set("Origin-Agent-Cluster", "?1")
+			responseWriter.Header().Set("X-DNS-Prefetch-Control", "off")
+			responseWriter.Header().Set("X-Download-Options", "noopen")
+			responseWriter.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+			responseWriter.Header().Set("X-XSS-Protection", "0")
+
 			next.ServeHTTP(responseWriter, request)
 		})
 	}
-}
-
-func cspNonce(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		nonceBytes := make([]byte, 16)
-		if _, err := rand.Read(nonceBytes); err != nil {
-			http.Error(responseWriter, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		nonce := base64.StdEncoding.EncodeToString(nonceBytes)
-		request = request.WithContext(httpx.WithCSPNonce(request.Context(), nonce))
-		next.ServeHTTP(responseWriter, request)
-	})
 }
 
 func recoverPanics(logger *logging.Logger, renderer *templates.Renderer) middleware {

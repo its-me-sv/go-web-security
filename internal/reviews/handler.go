@@ -162,7 +162,7 @@ func (handler *Handler) Delete(responseWriter http.ResponseWriter, request *http
 
 func (handler *Handler) requireReview(responseWriter http.ResponseWriter, request *http.Request) (Review, bool) {
 	current, ok := handler.requireAuth(responseWriter, request)
-	if !ok || !handler.verifyCSRF(responseWriter, request, current.Session.CSRFToken) {
+	if !ok {
 		return Review{}, false
 	}
 	reviewID, valid := httpx.ParseSafeInteger(request.PathValue("id"))

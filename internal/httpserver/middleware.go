@@ -9,6 +9,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,6 +52,36 @@ func noSniff(next http.Handler) http.Handler {
 		responseWriter.Header().Set("X-Content-Type-Options", "nosniff")
 		next.ServeHTTP(responseWriter, request)
 	})
+}
+
+func csrfProtection(appOrigin string, renderer *templates.Renderer) middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+			if request.Method == http.MethodPost {
+				origin := request.Header.Get("Origin")
+				if origin == "" {
+					referrer := request.Header.Get("Referer")
+					refURL, err := url.Parse(referrer)
+					if err != nil {
+						if err := httpx.RespondWithErrorPage(responseWriter, renderer, http.StatusForbidden, "Forbidden Request", "Request not accepted"); err != nil {
+							http.Error(responseWriter, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+						}
+						return
+					}
+					origin = fmt.Sprintf("%s://%s", refURL.Scheme, refURL.Host)
+				}
+
+				if origin != appOrigin {
+					if err := httpx.RespondWithErrorPage(responseWriter, renderer, http.StatusForbidden, "Forbidden Request", "Request not accepted"); err != nil {
+						http.Error(responseWriter, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+					}
+					return
+				}
+			}
+
+			next.ServeHTTP(responseWriter, request)
+		})
+	}
 }
 
 func cspNonce(next http.Handler) http.Handler {

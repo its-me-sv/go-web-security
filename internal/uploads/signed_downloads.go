@@ -34,6 +34,6 @@ func VerifySignedDownload(signingKey [32]byte, fileID int64, expiresValue, signa
 
 func signDownload(signingKey [32]byte, fileID, expires int64) string {
 	mac := hmac.New(sha256.New, signingKey[:])
-	fmt.Fprint(mac, "GET\n/files/%d/signed-download\n%d", fileID, expires)
+	fmt.Fprintf(mac, "GET\n/files/%d/signed-download\n%d", fileID, expires)
 	return hex.EncodeToString(mac.Sum(nil))
 }

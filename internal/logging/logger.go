@@ -3,7 +3,6 @@ package logging
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -31,12 +30,29 @@ func (logger *Logger) Close() error {
 	return logger.file.Close()
 }
 
+var sensitiveKeys = map[string]struct{}{
+	"sessionId":   {},
+	"resetToken":  {},
+	"resetLink":   {},
+	"secret":      {},
+	"adminNotes":  {},
+	"storagePath": {},
+}
+
+const redactedValue = "[REDACTED]"
+
 func (logger *Logger) Event(eventName string, fields map[string]any) error {
 	record := map[string]any{
 		"timestamp": logger.now().UTC().Format("2006-01-02T15:04:05.000Z"),
 		"event":     eventName,
 	}
-	maps.Copy(record, fields)
+
+	for k, v := range fields {
+		if _, isSensitive := sensitiveKeys[k]; isSensitive {
+			v = redactedValue
+		}
+		record[k] = v
+	}
 
 	logger.mutex.Lock()
 	defer logger.mutex.Unlock()

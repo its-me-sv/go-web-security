@@ -14,7 +14,10 @@ type EncryptedPayload struct {
 	Ciphertext []byte
 }
 
-const authTagSize = 16
+const (
+	nonceLen   = 12
+	authTagLen = 16
+)
 
 func Encrypt(plaintext []byte, key [32]byte) (EncryptedPayload, error) {
 	aead, err := buildAEADFromKey(key)
@@ -22,27 +25,25 @@ func Encrypt(plaintext []byte, key [32]byte) (EncryptedPayload, error) {
 		return EncryptedPayload{}, err
 	}
 
-	nonce := make([]byte, aead.NonceSize())
+	nonce := make([]byte, nonceLen)
 	if _, err := rand.Read(nonce); err != nil {
 		return EncryptedPayload{}, err
 	}
 
 	sealed := aead.Seal(nil, nonce, plaintext, nil)
-	fullLen := len(sealed)
-	cipherText, authTag := sealed[:fullLen-authTagSize], sealed[fullLen-authTagSize:]
 
 	return EncryptedPayload{
 		Nonce:      nonce,
-		AuthTag:    authTag,
-		Ciphertext: cipherText,
+		AuthTag:    sealed[len(sealed)-authTagLen:],
+		Ciphertext: sealed[:len(sealed)-authTagLen],
 	}, nil
 }
 
 func Decrypt(payload EncryptedPayload, key [32]byte) ([]byte, error) {
-	if len(payload.Nonce) != 12 {
+	if len(payload.Nonce) != nonceLen {
 		return nil, errors.New("inavlid nonce")
 	}
-	if len(payload.AuthTag) != authTagSize {
+	if len(payload.AuthTag) != authTagLen {
 		return nil, errors.New("inavlid authTag")
 	}
 

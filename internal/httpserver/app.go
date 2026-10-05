@@ -234,6 +234,11 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 	handler := applyMiddleware(
 		mainMux,
 		recoverPanics(logger, renderer),
+		fixedWindowRateLimiter(rateLimitOptions{
+			window:  1 * time.Minute,
+			maximum: 100,
+			key:     clientIPKeyWithTrustedProxies(options.TrustedProxyHops),
+		}),
 	)
 	return &Application{Handler: handler, publicRoot: publicRoot}, nil
 }

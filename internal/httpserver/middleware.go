@@ -221,8 +221,24 @@ func (limiter *fixedWindowLimiter) reject(responseWriter http.ResponseWriter, re
 
 func fixedWindowRateLimiter(options rateLimitOptions) middleware {
 	validateRateLimitOptions(options)
+	fwl := newFixedWindowLimiter(options)
+
 	return func(next http.Handler) http.Handler {
-		return next
+		return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+			if request.Method == http.MethodGet && request.URL.Path == "/health" {
+				next.ServeHTTP(responseWriter, request)
+				return
+			}
+
+			rls, limited := fwl.consume(request)
+			if limited {
+				fwl.reject(responseWriter, request, rls)
+				return
+			}
+
+			setRateLimitHeaders(responseWriter, rls)
+			next.ServeHTTP(responseWriter, request)
+		})
 	}
 }
 

@@ -31,12 +31,19 @@ func (logger *Logger) Close() error {
 }
 
 var sensitiveKeys = map[string]struct{}{
-	"sessionId":   {},
-	"resetToken":  {},
-	"resetLink":   {},
-	"secret":      {},
-	"adminNotes":  {},
-	"storagePath": {},
+	"sessionId":          {},
+	"resetToken":         {},
+	"resetLink":          {},
+	"secret":             {},
+	"adminNotes":         {},
+	"storagePath":        {},
+	"email":              {},
+	"shippingName":       {},
+	"shippingAddress":    {},
+	"shippingCity":       {},
+	"shippingRegion":     {},
+	"shippingPostalCode": {},
+	"originalName":       {},
 }
 
 const redactedValue = "[REDACTED]"

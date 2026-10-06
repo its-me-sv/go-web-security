@@ -225,11 +225,6 @@ func fixedWindowRateLimiter(options rateLimitOptions) middleware {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-			if request.Method == http.MethodGet && request.URL.Path == "/health" {
-				next.ServeHTTP(responseWriter, request)
-				return
-			}
-
 			rls, limited := fwl.consume(request)
 			if limited {
 				fwl.reject(responseWriter, request, rls)

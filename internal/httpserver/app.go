@@ -137,6 +137,7 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 	if err != nil {
 		return nil, err
 	}
+
 	productAPILimiter := fixedWindowRateLimiter(rateLimitOptions{
 		window:  time.Minute,
 		maximum: 30,
@@ -145,6 +146,37 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 			responseWriter.Header().Set("Access-Control-Allow-Origin", "*")
 			httpx.RespondWithJSON(responseWriter, http.StatusTooManyRequests, map[string]string{"error": "Too many requests"})
 		},
+	})
+
+	authRateLimiter := func(responseWriter http.ResponseWriter, _ *http.Request, _ rateLimitState) {
+		if err := httpx.RespondWithErrorPage(responseWriter, renderer, http.StatusTooManyRequests, "Too Many Requests", "Try again later."); err != nil {
+			http.Error(responseWriter, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+	}
+
+	loginIPAPILimiter := fixedWindowRateLimiter(rateLimitOptions{
+		window:  15 * time.Minute,
+		maximum: 20,
+		key:     clientIPKeyWithTrustedProxies(options.TrustedProxyHops),
+		onLimit: authRateLimiter,
+	})
+	passwordResetIPAPILimiter := fixedWindowRateLimiter(rateLimitOptions{
+		window:  time.Hour,
+		maximum: 10,
+		key:     clientIPKeyWithTrustedProxies(options.TrustedProxyHops),
+		onLimit: authRateLimiter,
+	})
+	loginAccountAPILimiter := fixedWindowRateLimiter(rateLimitOptions{
+		window:  15 * time.Minute,
+		maximum: 5,
+		key:     emailRateLimit,
+		onLimit: authRateLimiter,
+	})
+	passwordResetAccountAPILimiter := fixedWindowRateLimiter(rateLimitOptions{
+		window:  time.Hour,
+		maximum: 3,
+		key:     emailRateLimit,
+		onLimit: authRateLimiter,
 	})
 
 	dynamicMux := http.NewServeMux()
@@ -158,16 +190,16 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 	dynamicMux.HandleFunc("GET /api/integrations/warehouse/orders", apiHandler.WarehouseOrders)
 	dynamicMux.Handle("POST /products/{id}/reviews", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(reviewHandler.Create)))
 	dynamicMux.HandleFunc("GET /login", authenticationHandler.LoginPage)
-	dynamicMux.Handle("POST /login", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.Login)))
+	dynamicMux.Handle("POST /login", parseForm(options.MaxRequestBodyBytes, renderer)(loginIPAPILimiter(loginAccountAPILimiter(http.HandlerFunc(authenticationHandler.Login)))))
 	dynamicMux.HandleFunc("GET /login/totp", authenticationHandler.TOTPLoginPage)
-	dynamicMux.Handle("POST /login/totp", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.TOTPLogin)))
+	dynamicMux.Handle("POST /login/totp", parseForm(options.MaxRequestBodyBytes, renderer)(loginIPAPILimiter(http.HandlerFunc(authenticationHandler.TOTPLogin))))
 	dynamicMux.HandleFunc("POST /login/totp/cancel", authenticationHandler.CancelTOTPLogin)
 	dynamicMux.HandleFunc("GET /signup", authenticationHandler.SignupPage)
 	dynamicMux.Handle("POST /signup", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.Signup)))
 	dynamicMux.HandleFunc("GET /recover-mfa", authenticationHandler.MFARecoveryPage)
 	dynamicMux.Handle("POST /recover-mfa", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.RecoverMFA)))
 	dynamicMux.HandleFunc("GET /password-reset", authenticationHandler.PasswordResetRequestPage)
-	dynamicMux.Handle("POST /password-reset", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.RequestPasswordReset)))
+	dynamicMux.Handle("POST /password-reset", parseForm(options.MaxRequestBodyBytes, renderer)(passwordResetIPAPILimiter(passwordResetAccountAPILimiter(http.HandlerFunc(authenticationHandler.RequestPasswordReset)))))
 	dynamicMux.HandleFunc("GET /password-reset/{token}", authenticationHandler.PasswordResetPage)
 	dynamicMux.Handle("POST /password-reset/{token}", parseForm(options.MaxRequestBodyBytes, renderer)(http.HandlerFunc(authenticationHandler.ResetPassword)))
 	dynamicMux.HandleFunc("POST /logout", authenticationHandler.Logout)

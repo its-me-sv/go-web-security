@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bootdotdev/learn-web-security/internal/accounts"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
 	"github.com/bootdotdev/learn-web-security/internal/templates"
@@ -267,6 +268,10 @@ func clientIPKeyWithTrustedProxies(trustedProxyHops int) func(*http.Request) str
 		}
 		return clientIPKey(request)
 	}
+}
+
+func emailRateLimit(request *http.Request) string {
+	return accounts.NormalizeEmail(request.PostForm.Get("email"))
 }
 
 func boolToInt64(value bool) int64 {

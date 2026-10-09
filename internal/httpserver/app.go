@@ -250,11 +250,11 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		}
 	})
 
-	dynamicHandler := fixedWindowRateLimiter(rateLimitOptions{
+	dynamicHandler := LoadShedder(50, 1)(fixedWindowRateLimiter(rateLimitOptions{
 		window:  1 * time.Minute,
 		maximum: 100,
 		key:     clientIPKeyWithTrustedProxies(options.TrustedProxyHops),
-	})(securityHeaders(options.AppOrigin, renderer)(dynamicMux))
+	})(securityHeaders(options.AppOrigin, renderer)(dynamicMux)))
 
 	mainMux := http.NewServeMux()
 	mainMux.HandleFunc("GET /health", func(responseWriter http.ResponseWriter, _ *http.Request) {

@@ -12,6 +12,7 @@ import (
 	"github.com/bootdotdev/learn-web-security/internal/auth/passwords"
 	"github.com/bootdotdev/learn-web-security/internal/auth/returnto"
 	"github.com/bootdotdev/learn-web-security/internal/auth/sessions"
+	"github.com/bootdotdev/learn-web-security/internal/botdetection"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
 	"github.com/bootdotdev/learn-web-security/internal/templates"
@@ -246,6 +247,17 @@ func parseForm(maxBodyBytes int64, renderer *templates.Renderer) middleware {
 				return
 			}
 			next.ServeHTTP(responseWriter, request)
+		})
+	}
+}
+
+func protectSignup(renderer *templates.Renderer) middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if botdetection.ProtectSignup(w, r, renderer) {
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

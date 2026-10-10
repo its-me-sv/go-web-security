@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
@@ -29,6 +30,17 @@ func applyMiddleware(handler http.Handler, middlewareChain ...middleware) http.H
 		handler = currentMiddleware(handler)
 	}
 	return handler
+}
+
+func assignRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestId := uuid.NewV4()
+
+		w.Header().Set("X-Request-ID", requestId.String())
+		r = r.WithContext(httpx.WithRequestID(r.Context(), requestId))
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func securityHeaders(appOrigin string, renderer *templates.Renderer) middleware {

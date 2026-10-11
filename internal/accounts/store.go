@@ -61,6 +61,11 @@ func NewStore(database *sql.DB) *Store {
 	return &Store{queries: dbgen.New(database), now: time.Now, random: rand.Reader}
 }
 
+func (store *Store) RevokeAllActiveSessions(ctx context.Context) (int, error) {
+	rows, err := store.queries.RevokeAllActiveSessions(ctx)
+	return int(rows), err
+}
+
 func (store *Store) FindUserByEmail(ctx context.Context, email string) (User, bool, error) {
 	row, err := store.queries.GetUserByEmail(ctx, email)
 	if err != nil {

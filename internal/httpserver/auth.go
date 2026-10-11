@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
@@ -15,6 +16,7 @@ import (
 	"github.com/bootdotdev/learn-web-security/internal/botdetection"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
+	"github.com/bootdotdev/learn-web-security/internal/observability"
 	"github.com/bootdotdev/learn-web-security/internal/templates"
 )
 
@@ -29,24 +31,28 @@ type authPage struct {
 }
 
 type authHandler struct {
-	accounts         *accounts.Store
-	renderer         *templates.Renderer
-	logger           *logging.Logger
-	mfa              *mfa.Store
-	passwordResets   *passwordreset.Store
-	appOrigin        string
-	trustedProxyHops int
+	accounts             *accounts.Store
+	renderer             *templates.Renderer
+	logger               *logging.Logger
+	mfa                  *mfa.Store
+	passwordResets       *passwordreset.Store
+	appOrigin            string
+	trustedProxyHops     int
+	failedLoginTracker   *observability.AuthAlertThreshold
+	passwordResetTracker *observability.AuthAlertThreshold
 }
 
 func newAuthHandler(accountStore *accounts.Store, mfaStore *mfa.Store, passwordResetStore *passwordreset.Store, renderer *templates.Renderer, logger *logging.Logger, appOrigin string, trustedProxyHops int) *authHandler {
 	return &authHandler{
-		accounts:         accountStore,
-		renderer:         renderer,
-		logger:           logger,
-		mfa:              mfaStore,
-		passwordResets:   passwordResetStore,
-		appOrigin:        appOrigin,
-		trustedProxyHops: trustedProxyHops,
+		accounts:             accountStore,
+		renderer:             renderer,
+		logger:               logger,
+		mfa:                  mfaStore,
+		passwordResets:       passwordResetStore,
+		appOrigin:            appOrigin,
+		trustedProxyHops:     trustedProxyHops,
+		failedLoginTracker:   observability.NewAuthAlertThreshold("failed_logins", 3, 5*time.Minute, logger),
+		passwordResetTracker: observability.NewAuthAlertThreshold("password_reset_requests", 3, 10*time.Minute, logger),
 	}
 }
 
@@ -321,21 +327,29 @@ func (handler *authHandler) internalError(responseWriter http.ResponseWriter, re
 }
 
 func (handler *authHandler) logAuthenticationEvent(request *http.Request, eventName string, fields map[string]any) {
-	fields["requestId"] = httpx.RequestID(request.Context()).String()
-	fields["sourceIp"] = clientIPKeyWithTrustedProxies(handler.trustedProxyHops)(request)
+	requestID := httpx.RequestID(request.Context())
+	sourceIP := clientIPKeyWithTrustedProxies(handler.trustedProxyHops)(request)
 
-	_, userIdFound := fields["userId"]
-	if !userIdFound {
-		fields["userId"] = nil
-	}
+	fields["requestId"] = requestID.String()
+	fields["sourceIp"] = sourceIP
+	fields["userId"] = fields["userId"]
 
-	fields["outcome"] = "success"
-	isSuccess, isSuccessFound := fields["success"]
-	if boolValue, ok := isSuccess.(bool); (ok && !boolValue) || !isSuccessFound {
-		fields["outcome"] = "failure"
+	fields["outcome"] = "failure"
+	if success, _ := fields["success"].(bool); success {
+		fields["outcome"] = "success"
 	}
 
 	_ = handler.logger.Event(eventName, fields)
+
+	// recording failed logins
+	if eventName == "login_attempt" && fields["outcome"] == "failure" {
+		handler.failedLoginTracker.Record(requestID, sourceIP, fields["userId"])
+	}
+
+	// recording all password resets
+	if eventName == "password_reset_request" {
+		handler.passwordResetTracker.Record(requestID, sourceIP, fields["userId"])
+	}
 }
 
 func safeReturnTo(value string) string {

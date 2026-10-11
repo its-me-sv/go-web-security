@@ -261,6 +261,7 @@ func New(database *sql.DB, logger *logging.Logger, options Options) (*Applicatio
 		httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"ok": true, "app": "bearly-secure"})
 	})
 	staticHandler := newStaticHandler(publicRoot)
+	mainMux.Handle("GET /.well-known/security.txt", staticHandler)
 	mainMux.Handle("GET /reset.css", staticHandler)
 	mainMux.Handle("GET /styles.css", staticHandler)
 	mainMux.Handle("GET /passkey.js", staticHandler)

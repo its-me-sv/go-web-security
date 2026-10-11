@@ -1,0 +1,3 @@
+Contact: mailto:security@bearlysecure.example
+Policy: https://bearlysecure.example/security-policy
+Expires: 2027-04-09T08:46:04.660Z
